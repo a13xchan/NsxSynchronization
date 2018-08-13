@@ -84,11 +84,14 @@ Catch {
 # ServiceGroupExport
 # ServicesExport
 # DfwConfigExport
+# SecurityTagExport
+
 $IpSetExportFile = "$ZipOut\IpSetExport.xml"
 $SecurityGroupExportFile = "$ZipOut\SecurityGroupExport.xml"
 $ServiceGroupExportFile = "$ZipOut\ServiceGroupExport.xml"
 $ServicesExportFile = "$ZipOut\ServicesExport.xml"
 $DfwConfigExportFile = "$ZipOut\DfwConfigExport.xml"
+$SecurityTagExportFile = "$ZipOut\SecurityTagExport.xml"
 
 Try {
 	$IpSetHash = Import-CliXml $IpSetExportFile
@@ -96,11 +99,45 @@ Try {
 	$ServiceGroupHash = Import-CliXml $ServiceGroupExportFile
 	$ServicesHash = Import-CliXml $ServicesExportFile
 	$DfwConfigHash = [xml](Get-Content $DfwConfigExportFile)
+	$SecurityTagHash = Import-CliXml $SecurityTagExportFile
 }
 Catch {
 	If ($logon -eq "Yes") { Write-Log "Cannot import $_" }
 	Throw "Unable to import capture bundle content.  $_"
 }
+
+# Security Tag
+$count=0
+$countskip=0
+$countadd=0 
+$NSXSecurityTag = Get-NSXSecurityTag -connection $Connection
+If ($logon -eq "Yes") { Write-Log "******** Importing SecurityTag" }
+ForEach ($SecurityTagId in $SecurityTagHash.Keys){
+	[System.Xml.XmlDocument]$SecurityTagDoc = $SecurityTagHash.Item($SecurityTagId)
+	$SecurityTag = $SecurityTagDoc.SecurityTag
+	$SecurityTagname = $SecurityTag.name
+	$SecurityTagdescription = $SecurityTag.description
+	If ($logon -eq "Yes") { Write-Log "Found Security Tag: $SecurityTagname with value: $SecurityTagvalue (Descr: $SecurityTagdescription" }
+	# Check if exists, in $Connection
+	If ($logon -eq "Yes") { Write-Log "Checking for existing SecurityTag" }
+	$itemSecurityTagfromNSX = $NSXSecurityTag | Where {$_.name -eq $SecurityTagname} | measure
+	If ($itemSecurityTagfromNSX.count -lt 1){
+		# doesnotexist
+		If ($logon -eq "Yes") { Write-Log "[ADDING] SecurityTag: $SecurityTagname will be added in NSX" }
+		# New
+		New-NsxSecurityTag -Name "$SecurityTagname" -Description "$SecurityTagdescription"
+		$countadd=$countadd+1
+	}else{
+		#doesexist skip
+		If ($logon -eq "Yes") { Write-Log "[SKIP] SecurityTag: $SecurityTagname exists in NSX, skipping...." }
+		$countskip=$countskip+1
+	}
+$count=$count+1	
+}
+If ($logon -eq "Yes") { Write-Log "+++++ Finished importing SecurityTag" }
+If ($logon -eq "Yes") { Write-Log "++    Total SecurityTag: $count" }
+If ($logon -eq "Yes") { Write-Log "++    Total SecurityTag Skipped: $countskip" }
+If ($logon -eq "Yes") { Write-Log "++    Total SecurityTag Add: $countadd" }
 
 # IP Set
 $count=0
